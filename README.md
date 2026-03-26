@@ -4,6 +4,8 @@ This is a GroupMe, Discord, or Slack chat bot for ESPN Fantasy Baseball leagues.
 
 Adapted from [dtcarls/fantasy_football_chat_bot](https://github.com/dtcarls/fantasy_football_chat_bot) for baseball.
 
+> **AI Disclaimer:** This codebase has been significantly modified by AI (Claude by Anthropic). The conversion from fantasy football to fantasy baseball, including matchup period derivation, scheduling logic, and multi-format scoring support, was generated with AI assistance.
+
 ## What does this do?
 
 Sends automated messages about your ESPN Fantasy Baseball league on a schedule tuned for the MLB season (late March - October):
