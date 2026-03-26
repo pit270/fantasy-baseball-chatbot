@@ -13,20 +13,24 @@ services:
       #ESPN league id (REQUIRED)
       LEAGUE_ID:
       # #When the bot will start paying attention and sending messages to your chat.
-      # START_DATE:
+      # START_DATE: "2026-03-26"
       # #When the bot will stop paying attention and stop sending messages to your chat.
-      # END_DATE:
+      # END_DATE: "2026-10-15"
       # #ESPN League year
-      # LEAGUE_YEAR:
+      # LEAGUE_YEAR: "2026"
       # #The timezone that the messages will look to send in. (America/New_York by default)
       # TIMEZONE:
       # #The message that the bot will say when it is started (can be blank for no message)
       # INIT_MSG:
-      # #If set to True, when standings are posted on Wednesday it will also include top half scoring wins
+      # #If set to True, standings will include top half scoring wins
       # TOP_HALF_SCORING:
-      # #If set to True, when matchups are posted on Tuesday it will also include a random phrase
-      # RANDOM_PHRASE:
       # #Used for private leagues. See Private Leagues Section for documentation
       # ESPN_S2:
       # #Used for private leagues. See Private Leagues Section for documentation
       # SWID:
+      # #Enable daily waiver reports
+      # DAILY_WAIVER:
+      # #Enable waiver reports
+      # WAIVER_REPORT:
+      # #Enable player injury monitor
+      # MONITOR_REPORT:

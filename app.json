@@ -1,18 +1,16 @@
 {
   "stack": "heroku-22",
-  "name": "Fantasy Football Chat Bot",
-  "description": "ESPN Fantasy Football GroupMe, Slack, and Discord Chat Bot.",
+  "name": "Fantasy Baseball Chat Bot",
+  "description": "ESPN Fantasy Baseball GroupMe, Slack, and Discord Chat Bot.",
   "keywords": [
-    "fantasy football",
+    "fantasy baseball",
     "espn",
     "groupme",
     "slack",
     "discord",
     "chat bot",
-    "ff"
+    "mlb"
   ],
-  "website": "https://github.com/dtcarls/fantasy_football_chat_bot/",
-  "repository": "https://github.com/dtcarls/fantasy_football_chat_bot/",
   "env": {
     "BOT_ID": {
       "description": "GroupMe Bot ID",
@@ -30,12 +28,12 @@
       "required": false
     },
     "LEAGUE_ID": {
-      "description": "ESPN League ID",
+      "description": "ESPN Fantasy Baseball League ID",
       "value": "1"
     },
     "LEAGUE_YEAR": {
       "description": "ESPN League Year",
-      "value": "2024",
+      "value": "2026",
       "required": false
     },
     "TIMEZONE": {
@@ -45,17 +43,17 @@
     },
     "START_DATE": {
       "description": "Season Start Date",
-      "value": "2024-09-05",
+      "value": "2026-03-26",
       "required": false
     },
     "END_DATE": {
       "description": "Season End Date",
-      "value": "2025-01-05",
+      "value": "2026-10-15",
       "required": false
     },
     "INIT_MSG": {
       "description": "Bot Init Message",
-      "value": "Successfully installed https://github.com/dtcarls/fantasy_football_chat_bot you can now remove this init_msg"
+      "value": "Fantasy Baseball Bot is live! Good luck this season."
     }
   }
 }

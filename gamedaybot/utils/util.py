@@ -117,7 +117,7 @@ def str_to_datetime(date_str: str) -> datetime:
 
 def currently_in_season(season_start_date=None, season_end_date=None, current_date=None):
     """
-    Check if the current date is during the football season.
+    Check if the current date is during the baseball season.
 
     Parameters
     ----------

@@ -7,13 +7,9 @@ setup(
 
     include_package_data=True,
 
-    version='0.3.1',
+    version='0.4.0',
 
-    description='ESPN fantasy football Chat Bot',
-
-    author='Dean Carlson',
-
-    author_email='deantcarlson@gmail.com',
+    description='ESPN Fantasy Baseball Chat Bot',
 
     install_requires=['urllib3<=2.2.3', 'espn_api>=0.38.1', 'requests>=2.0.0,<3.0.0', 'apscheduler>=3.3.0,<4.0.0', 'datetime'],
 

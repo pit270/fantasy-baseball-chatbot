@@ -6,18 +6,18 @@ import gamedaybot.utils.util as utils
 def get_env_vars():
     data = {}
     try:
-        ff_start_date = os.environ["START_DATE"]
+        season_start_date = os.environ["START_DATE"]
     except KeyError:
-        ff_start_date = '2024-09-05'
+        season_start_date = '2026-03-26'
 
-    data['ff_start_date'] = ff_start_date
+    data['season_start_date'] = season_start_date
 
     try:
-        ff_end_date = os.environ["END_DATE"]
+        season_end_date = os.environ["END_DATE"]
     except KeyError:
-        ff_end_date = '2025-01-05'
+        season_end_date = '2026-10-15'
 
-    data['ff_end_date'] = ff_end_date
+    data['season_end_date'] = season_end_date
 
     try:
         my_timezone = os.environ["TIMEZONE"]
@@ -62,8 +62,6 @@ def get_env_vars():
     if (len(str(bot_id)) <= 1 and
         len(str(slack_webhook_url)) <= 1 and
             len(str(discord_webhook_url)) <= 1):
-        # Ensure that there's info for at least one messaging platform,
-        # use length of str in case of blank but non null env variable
         raise Exception("No messaging platform info provided. Be sure one of BOT_ID, SLACK_WEBHOOK_URL, or DISCORD_WEBHOOK_URL env variables are set")
 
     data['str_limit'] = str_limit
@@ -76,7 +74,7 @@ def get_env_vars():
     try:
         year = int(os.environ["LEAGUE_YEAR"])
     except KeyError:
-        year = 2024
+        year = 2026
 
     data['year'] = year
 
@@ -114,13 +112,6 @@ def get_env_vars():
     data['top_half_scoring'] = top_half_scoring
 
     try:
-        random_phrase = utils.str_to_bool(os.environ["RANDOM_PHRASE"])
-    except KeyError:
-        random_phrase = False
-
-    data['random_phrase'] = random_phrase
-
-    try:
         waiver_report = utils.str_to_bool(os.environ["WAIVER_REPORT"])
     except KeyError:
         waiver_report = False
@@ -130,7 +121,6 @@ def get_env_vars():
     try:
         data['init_msg'] = os.environ["INIT_MSG"]
     except KeyError:
-        # do nothing here, empty init message
         pass
 
     return data
