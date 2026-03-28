@@ -24,38 +24,21 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-def espn_bot(function):
+def generate_report(function):
     """
-    Send messages to a messaging platform with information about an ESPN fantasy baseball league.
+    Generate report text for a given function name.
 
     Parameters
     ----------
     function: str
-        A string that specifies which type of information to send.
+        A string that specifies which type of report to generate.
+
+    Returns
+    -------
+    str or None
+        The generated report text, or None if no report could be generated.
     """
-
     data = get_env_vars()
-    str_limit = data['str_limit']
-
-    try:
-        bot_id = data['bot_id']
-    except KeyError:
-        bot_id = 1
-
-    try:
-        slack_webhook_url = data['slack_webhook_url']
-    except KeyError:
-        slack_webhook_url = 1
-
-    try:
-        discord_webhook_url = data['discord_webhook_url']
-    except KeyError:
-        discord_webhook_url = 1
-
-    if (len(str(bot_id)) <= 1 and
-        len(str(slack_webhook_url)) <= 1 and
-            len(str(discord_webhook_url)) <= 1):
-        raise Exception("No messaging platform info provided. Be sure one of BOT_ID, SLACK_WEBHOOK_URL, or DISCORD_WEBHOOK_URL env variables are set")
 
     league_id = data['league_id']
 
@@ -84,10 +67,6 @@ def espn_bot(function):
     except KeyError:
         top_half_scoring = False
 
-    groupme_bot = GroupMe(bot_id)
-    slack_bot = Slack(slack_webhook_url)
-    discord_bot = Discord(discord_webhook_url)
-
     if swid == '{1}' or espn_s2 == '1':
         league = League(league_id=league_id, year=year)
     else:
@@ -101,7 +80,7 @@ def espn_bot(function):
     # always let init and broadcast run
     if function not in ["init", "broadcast", "win_matrix", "trophy_recap"] and league.scoringPeriodId > league.finalScoringPeriod:
         logger.info("Not in active season")
-        return
+        return None
 
     text = ''
     logger.info("Function: " + function)
@@ -145,18 +124,71 @@ def espn_bot(function):
     else:
         text = "Something bad happened. HALP"
 
-    logger.debug(data)
     if text != '' and text is not None:
+        return text
+    return None
+
+
+def espn_bot(function):
+    """
+    Send messages to a messaging platform with information about an ESPN fantasy baseball league.
+
+    Parameters
+    ----------
+    function: str
+        A string that specifies which type of information to send.
+    """
+    from gamedaybot.chat.discord_bot import send_message as discord_bot_send
+
+    data = get_env_vars()
+    str_limit = data['str_limit']
+
+    try:
+        bot_id = data['bot_id']
+    except KeyError:
+        bot_id = 1
+
+    try:
+        slack_webhook_url = data['slack_webhook_url']
+    except KeyError:
+        slack_webhook_url = 1
+
+    try:
+        discord_webhook_url = data['discord_webhook_url']
+    except KeyError:
+        discord_webhook_url = 1
+
+    use_discord_bot = bool(data.get('discord_bot_token') and data.get('discord_channel_id'))
+
+    groupme_bot = GroupMe(bot_id)
+    slack_bot = Slack(slack_webhook_url)
+    discord_webhook = Discord(discord_webhook_url)
+
+    text = generate_report(function)
+
+    logger.debug(data)
+    if text:
         logger.debug(text)
         messages = util.str_limit_check(text, str_limit)
         for message in messages:
             groupme_bot.send_message(message)
             slack_bot.send_message(message)
-            discord_bot.send_message(message)
+            if use_discord_bot:
+                discord_bot_send(message)
+            else:
+                discord_webhook.send_message(message)
 
 
 if __name__ == '__main__':
     from gamedaybot.espn.scheduler import scheduler
+    from gamedaybot.chat.discord_bot import start_discord_bot
 
-    espn_bot("init")
+    data = get_env_vars()
+    if util.str_to_bool(str(data.get('send_init_msg', True))):
+        espn_bot("init")
+
+    discord_token = data.get('discord_bot_token')
+    if discord_token:
+        start_discord_bot(discord_token, data.get('discord_channel_id'))
+
     scheduler()

@@ -59,15 +59,28 @@ def get_env_vars():
     except KeyError:
         discord_webhook_url = 1
 
+    try:
+        discord_bot_token = os.environ["DISCORD_BOT_TOKEN"]
+    except KeyError:
+        discord_bot_token = None
+
+    try:
+        discord_channel_id = os.environ["DISCORD_CHANNEL_ID"]
+    except KeyError:
+        discord_channel_id = None
+
     if (len(str(bot_id)) <= 1 and
         len(str(slack_webhook_url)) <= 1 and
-            len(str(discord_webhook_url)) <= 1):
-        raise Exception("No messaging platform info provided. Be sure one of BOT_ID, SLACK_WEBHOOK_URL, or DISCORD_WEBHOOK_URL env variables are set")
+            len(str(discord_webhook_url)) <= 1 and
+            not discord_bot_token):
+        raise Exception("No messaging platform info provided. Be sure one of BOT_ID, SLACK_WEBHOOK_URL, DISCORD_WEBHOOK_URL, or DISCORD_BOT_TOKEN env variables are set")
 
     data['str_limit'] = str_limit
     data['bot_id'] = bot_id
     data['slack_webhook_url'] = slack_webhook_url
     data['discord_webhook_url'] = discord_webhook_url
+    data['discord_bot_token'] = discord_bot_token
+    data['discord_channel_id'] = discord_channel_id
 
     data['league_id'] = os.environ["LEAGUE_ID"]
 
@@ -117,6 +130,13 @@ def get_env_vars():
         waiver_report = False
 
     data['waiver_report'] = waiver_report
+
+    try:
+        send_init_msg = utils.str_to_bool(os.environ["SEND_INIT_MSG"])
+    except KeyError:
+        send_init_msg = True
+
+    data['send_init_msg'] = send_init_msg
 
     try:
         data['init_msg'] = os.environ["INIT_MSG"]

@@ -24,7 +24,7 @@ def get_scoreboard_short(league, week=None):
                 score.append('%4s %6.2f - %6.2f %s' % (
                     i.home_team.team_abbrev, i.home_score,
                     i.away_score, i.away_team.team_abbrev))
-    text = ['Score Update (Matchup Period %d)' % week] + score
+    text = ['Score Update (Week %d)' % week] + score
     return '\n'.join(text)
 
 
@@ -42,7 +42,7 @@ def get_scoreboard(league, week=None):
     if not box_scores or not hasattr(box_scores[0], 'home_stats'):
         return get_scoreboard_short(league, week=week)
 
-    lines = ['Detailed Scoreboard (Matchup Period %d)' % week]
+    lines = ['Detailed Scoreboard (Week %d)' % week]
     for i in box_scores:
         if i.away_team and hasattr(i, 'home_stats'):
             lines.append('')
@@ -137,7 +137,7 @@ def get_matchups(league, week=None):
         i.away_team.wins, i.away_team.losses, i.away_team.ties, i.away_team.team_abbrev)
         for i in matchups if i.away_team]
 
-    text = ['Matchups (Period %d)' % week] + full_names + [''] + abbrevs
+    text = ['Matchups (Week %d)' % week] + full_names + [''] + abbrevs
     return '\n'.join(text)
 
 
@@ -244,36 +244,28 @@ def get_waiver_report(league, faab=False):
         actions = activity.actions
         d2 = date.fromtimestamp(activity.date / 1000).strftime('%Y-%m-%d')
         if d2 == today:
-            if len(actions) == 1 and actions[0][1] == 'WAIVER ADDED':
+            added_types = ('WAIVER ADDED', 'FA ADDED')
+            if len(actions) == 1 and actions[0][1] in added_types:
+                if not isinstance(actions[0][2], str) or not actions[0][2]:
+                    continue
                 team_name = actions[0][0].team_name
-                player_name = actions[0][2].name
-                player_position = actions[0][2].position
-                if faab:
-                    faab_amount = actions[0][3]
-                    s = f'{team_name} \nADDED {player_position} {player_name} (${faab_amount})\n'
-                else:
-                    s = f'{team_name} \nADDED {player_position} {player_name}\n'
+                player_name = actions[0][2]
+                s = f'{team_name} \nADDED {player_name}\n'
                 report += [s.lstrip()]
             elif len(actions) > 1:
-                if actions[0][1] == 'WAIVER ADDED' or actions[1][1] == 'WAIVER ADDED':
-                    if actions[0][1] == 'WAIVER ADDED':
-                        if faab:
-                            s = '%s \nADDED %s %s ($%s)\nDROPPED %s %s\n' % (
-                                actions[0][0].team_name, actions[0][2].position, actions[0][2].name,
-                                actions[0][3], actions[1][2].position, actions[1][2].name)
-                        else:
-                            s = '%s \nADDED %s %s\nDROPPED %s %s\n' % (
-                                actions[0][0].team_name, actions[0][2].position, actions[0][2].name,
-                                actions[1][2].position, actions[1][2].name)
+                if actions[0][1] in added_types or actions[1][1] in added_types:
+                    if not isinstance(actions[0][2], str) or not isinstance(actions[1][2], str):
+                        continue
+                    if not actions[0][2] or not actions[1][2]:
+                        continue
+                    if actions[0][1] in added_types:
+                        added_player = actions[0][2]
+                        dropped_player = actions[1][2]
                     else:
-                        if faab:
-                            s = '%s \nADDED %s %s ($%s)\nDROPPED %s %s\n' % (
-                                actions[0][0].team_name, actions[1][2].position, actions[1][2].name,
-                                actions[1][3], actions[0][2].position, actions[0][2].name)
-                        else:
-                            s = '%s \nADDED %s %s\nDROPPED %s %s\n' % (
-                                actions[0][0].team_name, actions[1][2].position, actions[1][2].name,
-                                actions[0][2].position, actions[0][2].name)
+                        added_player = actions[1][2]
+                        dropped_player = actions[0][2]
+                    s = '%s \nADDED %s\nDROPPED %s\n' % (
+                        actions[0][0].team_name, added_player, dropped_player)
                     report += [s.lstrip()]
 
     report.reverse()
@@ -443,7 +435,7 @@ def get_trophies(league, week=None, recap=False):
 
     score_label = "category wins" if is_categories else "points"
 
-    lines = ['Trophies of the matchup period:']
+    lines = ['Trophies of the week:']
 
     if high_team:
         lines += ['High score: %s with %.2f %s' % (high_team.team_name, high_score, score_label)]

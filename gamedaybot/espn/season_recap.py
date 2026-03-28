@@ -73,7 +73,7 @@ def win_matrix(league):
                                key=lambda item: item[1][0] / max(item[1][1], 1),
                                reverse=True))
 
-    standings_txt = ["Standings if everyone played every team every matchup period"]
+    standings_txt = ["Standings if everyone played every team every week"]
     pos = 1
     for team in team_record:
         standings_txt += [f"{pos:2}. {team:4} ({team_record[team][0]}-{team_record[team][1]})"]
