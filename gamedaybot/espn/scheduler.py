@@ -47,9 +47,10 @@ def check_matchup_period_change(guild_config):
         if current_mp != _last_matchup_period[guild_id]:
             logger.info(f"[{guild_id}] Matchup period changed: {_last_matchup_period[guild_id]} -> {current_mp}")
             _last_matchup_period[guild_id] = current_mp
-            espn_bot("get_final", guild_config)
-            espn_bot("get_standings", guild_config)
-            espn_bot("get_matchups", guild_config)
+            if guild_config.get('period_recap', True):
+                espn_bot("get_final", guild_config)
+                espn_bot("get_standings", guild_config)
+                espn_bot("get_matchups", guild_config)
 
     except Exception as e:
         logger.error(f"[{guild_id}] Error checking matchup period: {e}")
@@ -58,6 +59,8 @@ def check_matchup_period_change(guild_config):
 def check_period_ending(guild_config):
     """Send close scores alert if today is the last day of the matchup period."""
     guild_id = guild_config['guild_id']
+    if not guild_config.get('close_scores', True):
+        return
     try:
         league, espn_s2, swid = _get_league(guild_config)
         info = get_current_period_info(league, espn_s2, swid)
@@ -92,15 +95,17 @@ def register_guild_jobs(guild_config):
                    start_date=season_start, end_date=season_end,
                    timezone=game_timezone, replace_existing=True)
 
-    _sched.add_job(espn_bot, 'cron', args=['get_scoreboard_short', guild_config],
-                   id=f'{prefix}_scoreboard_morning', hour=8, minute=0,
-                   start_date=season_start, end_date=season_end,
-                   timezone=my_timezone, replace_existing=True)
+    if guild_config.get('scoreboard_morning', True):
+        _sched.add_job(espn_bot, 'cron', args=['get_scoreboard_short', guild_config],
+                       id=f'{prefix}_scoreboard_morning', hour=8, minute=0,
+                       start_date=season_start, end_date=season_end,
+                       timezone=my_timezone, replace_existing=True)
 
-    _sched.add_job(espn_bot, 'cron', args=['get_scoreboard_short', guild_config],
-                   id=f'{prefix}_scoreboard_evening', hour=23, minute=0,
-                   start_date=season_start, end_date=season_end,
-                   timezone=game_timezone, replace_existing=True)
+    if guild_config.get('scoreboard_evening', True):
+        _sched.add_job(espn_bot, 'cron', args=['get_scoreboard_short', guild_config],
+                       id=f'{prefix}_scoreboard_evening', hour=23, minute=0,
+                       start_date=season_start, end_date=season_end,
+                       timezone=game_timezone, replace_existing=True)
 
     # Waiver report: Mondays only by default, every day if daily_waiver is enabled
     waiver_dow = 'mon-sun' if guild_config.get('daily_waiver', False) else 'mon'

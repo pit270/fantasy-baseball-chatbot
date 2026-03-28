@@ -19,22 +19,36 @@ def _connect():
 
 
 def init_db():
-    """Create the guilds table if it doesn't exist."""
+    """Create the guilds table if it doesn't exist, and migrate existing tables."""
     with _connect() as conn:
         conn.execute('''
             CREATE TABLE IF NOT EXISTS guilds (
-                guild_id         TEXT PRIMARY KEY,
-                channel_id       TEXT,
-                league_id        TEXT,
-                league_year      INTEGER DEFAULT 2026,
-                espn_s2          TEXT,
-                swid             TEXT,
-                timezone         TEXT DEFAULT 'America/New_York',
-                monitor_report   INTEGER DEFAULT 1,
-                daily_waiver     INTEGER DEFAULT 0,
-                top_half_scoring INTEGER DEFAULT 0
+                guild_id            TEXT PRIMARY KEY,
+                channel_id          TEXT,
+                league_id           TEXT,
+                league_year         INTEGER DEFAULT 2026,
+                espn_s2             TEXT,
+                swid                TEXT,
+                timezone            TEXT DEFAULT 'America/New_York',
+                monitor_report      INTEGER DEFAULT 1,
+                daily_waiver        INTEGER DEFAULT 0,
+                top_half_scoring    INTEGER DEFAULT 0,
+                scoreboard_morning  INTEGER DEFAULT 1,
+                scoreboard_evening  INTEGER DEFAULT 1,
+                close_scores        INTEGER DEFAULT 1,
+                period_recap        INTEGER DEFAULT 1
             )
         ''')
+        # Migrate existing tables that predate these columns
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(guilds)")}
+        for col, default in [
+            ('scoreboard_morning', 1),
+            ('scoreboard_evening', 1),
+            ('close_scores', 1),
+            ('period_recap', 1),
+        ]:
+            if col not in existing:
+                conn.execute(f'ALTER TABLE guilds ADD COLUMN {col} INTEGER DEFAULT {default}')
         conn.commit()
 
 

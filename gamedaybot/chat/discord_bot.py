@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+from typing import Optional
 import threading
 import asyncio
 import logging
@@ -177,17 +178,111 @@ def create_bot():
             )
             return
 
-        s2_display = 'set' if config.get('espn_s2') else 'not set'
+        def _on(key, default=1):
+            return 'on' if config.get(key, default) else 'off'
+
         channel_id = config.get('channel_id')
+        lines = [
+            f"League ID:          {config.get('league_id', 'not set')}",
+            f"Year:               {config.get('league_year', 2026)}",
+            f"Alert channel:      {channel_id or 'not set'}",
+            f"Timezone:           {config.get('timezone', 'America/New_York')}",
+            f"ESPN auth:          {'set' if config.get('espn_s2') else 'not set'}",
+            f"",
+            f"Scheduled alerts:",
+            f"  Scoreboard (8am): {_on('scoreboard_morning')}",
+            f"  Scoreboard (11pm):{_on('scoreboard_evening')}",
+            f"  Waivers:          {'daily' if config.get('daily_waiver') else 'Mondays'}",
+            f"  Injuries:         {_on('monitor_report')}",
+            f"  Close scores:     {_on('close_scores')}",
+            f"  Period recap:     {_on('period_recap')}",
+        ]
+        await interaction.response.send_message(
+            "```" + "\n".join(lines) + "```", ephemeral=True
+        )
+
+    @bot.tree.command(name='config', description='Toggle scheduled alerts (admin only)')
+    @app_commands.describe(
+        scoreboard_morning='Morning score update at 8am (your timezone)',
+        scoreboard_evening='Evening score update at 11pm ET',
+        waivers='Waiver report — daily or Mondays only',
+        injuries='Daily injured/IL starters alert at 11am ET',
+        close_scores='Close scores alert on last day of each week',
+        period_recap='End-of-week recap: results, standings, matchups',
+        timezone='Your timezone, e.g. America/Chicago or America/Los_Angeles',
+    )
+    @app_commands.choices(waivers=[
+        app_commands.Choice(name='Daily (Mon–Sun)', value='daily'),
+        app_commands.Choice(name='Mondays only', value='monday'),
+    ])
+    async def config(
+        interaction: discord.Interaction,
+        scoreboard_morning: Optional[bool] = None,
+        scoreboard_evening: Optional[bool] = None,
+        waivers: Optional[str] = None,
+        injuries: Optional[bool] = None,
+        close_scores: Optional[bool] = None,
+        period_recap: Optional[bool] = None,
+        timezone: Optional[str] = None,
+    ):
+        from gamedaybot.db import get_guild_config, save_guild_config
+        from gamedaybot.espn.scheduler import register_guild_jobs
+
+        if not _is_admin(interaction.user):
+            await interaction.response.send_message(
+                "```Only server admins can run /config.```", ephemeral=True
+            )
+            return
+
+        guild_id = interaction.guild_id
+        config = get_guild_config(guild_id)
+        if not config or not config.get('league_id'):
+            await interaction.response.send_message(
+                "```Not configured yet. Run /setup first.```", ephemeral=True
+            )
+            return
+
+        updates = {}
+        if scoreboard_morning is not None:
+            updates['scoreboard_morning'] = int(scoreboard_morning)
+        if scoreboard_evening is not None:
+            updates['scoreboard_evening'] = int(scoreboard_evening)
+        if waivers is not None:
+            updates['daily_waiver'] = 1 if waivers == 'daily' else 0
+        if injuries is not None:
+            updates['monitor_report'] = int(injuries)
+        if close_scores is not None:
+            updates['close_scores'] = int(close_scores)
+        if period_recap is not None:
+            updates['period_recap'] = int(period_recap)
+        if timezone is not None:
+            updates['timezone'] = timezone.strip()
+
+        if not updates:
+            await interaction.response.send_message(
+                "```No changes specified.```", ephemeral=True
+            )
+            return
+
+        save_guild_config(guild_id, **updates)
+
+        # Re-register scheduler jobs to apply changes
+        full_config = get_guild_config(guild_id)
+        await asyncio.to_thread(register_guild_jobs, full_config)
+
+        def _on(key, default=1):
+            return 'on' if full_config.get(key, default) else 'off'
 
         lines = [
-            f"League ID:      {config.get('league_id', 'not set')}",
-            f"Year:           {config.get('league_year', 2026)}",
-            f"Alert channel:  {channel_id or 'not set'}",
-            f"Timezone:       {config.get('timezone', 'America/New_York')}",
-            f"ESPN auth:      {s2_display}",
-            f"Monitor report: {'on' if config.get('monitor_report', 1) else 'off'}",
-            f"Daily waivers:  {'on' if config.get('daily_waiver', 0) else 'off'}",
+            "Settings updated!",
+            f"",
+            f"  Scoreboard (8am): {_on('scoreboard_morning')}",
+            f"  Scoreboard (11pm):{_on('scoreboard_evening')}",
+            f"  Waivers:          {'daily' if full_config.get('daily_waiver') else 'Mondays'}",
+            f"  Injuries:         {_on('monitor_report')}",
+            f"  Close scores:     {_on('close_scores')}",
+            f"  Period recap:     {_on('period_recap')}",
+            f"  Timezone:         {full_config.get('timezone', 'America/New_York')}",
         ]
         await interaction.response.send_message(
             "```" + "\n".join(lines) + "```", ephemeral=True
