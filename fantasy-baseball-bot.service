@@ -1,0 +1,15 @@
+[Unit]
+Description=ESPN Fantasy Baseball Alert Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dev
+WorkingDirectory=/home/dev/proj/MLBFantasyAlertBot
+ExecStart=/home/dev/proj/MLBFantasyAlertBot/run.sh
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

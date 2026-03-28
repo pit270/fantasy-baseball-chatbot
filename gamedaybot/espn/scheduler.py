@@ -1,19 +1,30 @@
-from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.schedulers.background import BackgroundScheduler
 from gamedaybot.espn.espn_bot import espn_bot
-from gamedaybot.espn.env_vars import get_env_vars
 from gamedaybot.espn.matchup_periods import get_current_period_info
 from espn_api.baseball import League
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
+# Per-guild state: guild_id -> last known matchup period
+_last_matchup_period = {}
 
-def _get_league(data):
-    """Create a League instance from env var data."""
-    swid = data.get('swid', '{1}')
-    espn_s2 = data.get('espn_s2', '1')
-    league_id = data['league_id']
-    year = data.get('year', 2026)
+_sched = None
+
+
+def _get_league(guild_config):
+    """Create a League instance from a guild config dict."""
+    swid = guild_config.get('swid') or '{1}'
+    espn_s2 = guild_config.get('espn_s2') or '1'
+
+    if swid.find("{", 0) == -1:
+        swid = "{" + swid
+    if swid.find("}", -1) == -1:
+        swid = swid + "}"
+
+    league_id = guild_config['league_id']
+    year = guild_config.get('league_year', 2026)
 
     if swid == '{1}' or espn_s2 == '1':
         return League(league_id=league_id, year=year), None, None
@@ -21,129 +32,140 @@ def _get_league(data):
         return League(league_id=league_id, year=year, espn_s2=espn_s2, swid=swid), espn_s2, swid
 
 
-_last_matchup_period = None
-
-
-def check_matchup_period_change():
-    """
-    Periodic check for matchup period transitions.
-    When a new matchup period starts, send recap of the previous period
-    and announce new matchups.
-    """
-    global _last_matchup_period
-
+def check_matchup_period_change(guild_config):
+    """Check for matchup period transition and send recap if changed."""
+    guild_id = guild_config['guild_id']
     try:
-        data = get_env_vars()
-        league, espn_s2, swid = _get_league(data)
+        league, espn_s2, swid = _get_league(guild_config)
         current_mp = league.currentMatchupPeriod
 
-        if _last_matchup_period is None:
-            # First run - just record the current period
-            _last_matchup_period = current_mp
-            logger.info(f"Initial matchup period: {current_mp}")
+        if guild_id not in _last_matchup_period:
+            _last_matchup_period[guild_id] = current_mp
+            logger.info(f"[{guild_id}] Initial matchup period: {current_mp}")
             return
 
-        if current_mp != _last_matchup_period:
-            logger.info(f"Matchup period changed: {_last_matchup_period} -> {current_mp}")
-            _last_matchup_period = current_mp
-
-            # Send recap of previous period
-            espn_bot("get_final")
-            espn_bot("get_standings")
-
-            # Send new matchups
-            espn_bot("get_matchups")
+        if current_mp != _last_matchup_period[guild_id]:
+            logger.info(f"[{guild_id}] Matchup period changed: {_last_matchup_period[guild_id]} -> {current_mp}")
+            _last_matchup_period[guild_id] = current_mp
+            espn_bot("get_final", guild_config)
+            espn_bot("get_standings", guild_config)
+            espn_bot("get_matchups", guild_config)
 
     except Exception as e:
-        logger.error(f"Error checking matchup period: {e}")
+        logger.error(f"[{guild_id}] Error checking matchup period: {e}")
 
 
-def check_period_ending():
-    """
-    Check if we're on the last day of a matchup period.
-    If so, send close scores alert.
-    """
+def check_period_ending(guild_config):
+    """Send close scores alert if today is the last day of the matchup period."""
+    guild_id = guild_config['guild_id']
     try:
-        data = get_env_vars()
-        league, espn_s2, swid = _get_league(data)
+        league, espn_s2, swid = _get_league(guild_config)
         info = get_current_period_info(league, espn_s2, swid)
-
         if info and info['is_last_day']:
-            logger.info(f"Last day of matchup period {info['period']}")
-            espn_bot("get_close_scores")
-
+            logger.info(f"[{guild_id}] Last day of matchup period {info['period']}")
+            espn_bot("get_close_scores", guild_config)
     except Exception as e:
-        logger.error(f"Error checking period ending: {e}")
+        logger.error(f"[{guild_id}] Error checking period ending: {e}")
+
+
+def register_guild_jobs(guild_config):
+    """Register all scheduled jobs for a single guild."""
+    global _sched
+    if _sched is None:
+        return
+
+    guild_id = guild_config['guild_id']
+    game_timezone = 'America/New_York'
+    my_timezone = guild_config.get('timezone', 'America/New_York')
+    season_start = '2026-03-25'
+    season_end = '2026-10-15'
+
+    prefix = str(guild_id)
+
+    _sched.add_job(check_matchup_period_change, 'interval', hours=2,
+                   args=[guild_config],
+                   id=f'{prefix}_period_check', replace_existing=True)
+
+    _sched.add_job(check_period_ending, 'cron',
+                   args=[guild_config],
+                   id=f'{prefix}_close_scores', hour=22, minute=0,
+                   start_date=season_start, end_date=season_end,
+                   timezone=game_timezone, replace_existing=True)
+
+    _sched.add_job(espn_bot, 'cron', args=['get_scoreboard_short', guild_config],
+                   id=f'{prefix}_scoreboard_morning', hour=8, minute=0,
+                   start_date=season_start, end_date=season_end,
+                   timezone=my_timezone, replace_existing=True)
+
+    _sched.add_job(espn_bot, 'cron', args=['get_scoreboard_short', guild_config],
+                   id=f'{prefix}_scoreboard_evening', hour=23, minute=0,
+                   start_date=season_start, end_date=season_end,
+                   timezone=game_timezone, replace_existing=True)
+
+    # Waiver report: Mondays only by default, every day if daily_waiver is enabled
+    waiver_dow = 'mon-sun' if guild_config.get('daily_waiver', False) else 'mon'
+    _sched.add_job(espn_bot, 'cron', args=['get_waiver_report', guild_config],
+                   id=f'{prefix}_waiver_report', hour=7, minute=32,
+                   day_of_week=waiver_dow,
+                   start_date=season_start, end_date=season_end,
+                   timezone=my_timezone, replace_existing=True)
+
+    if guild_config.get('monitor_report', True):
+        _sched.add_job(espn_bot, 'cron', args=['get_monitor', guild_config],
+                       id=f'{prefix}_monitor', hour=11, minute=0,
+                       start_date=season_start, end_date=season_end,
+                       timezone=game_timezone, replace_existing=True)
+
+    logger.info(f"[{guild_id}] Scheduled jobs registered")
+
+
+def remove_guild_jobs(guild_id):
+    """Remove all scheduled jobs for a guild."""
+    global _sched
+    if _sched is None:
+        return
+
+    prefixes = [
+        f'{guild_id}_period_check',
+        f'{guild_id}_close_scores',
+        f'{guild_id}_scoreboard_morning',
+        f'{guild_id}_scoreboard_evening',
+        f'{guild_id}_waiver_report',
+        f'{guild_id}_monitor',
+    ]
+    for job_id in prefixes:
+        try:
+            _sched.remove_job(job_id)
+        except Exception:
+            pass
+
+    if guild_id in _last_matchup_period:
+        del _last_matchup_period[guild_id]
+
+    logger.info(f"[{guild_id}] Scheduled jobs removed")
 
 
 def scheduler():
     """
-    Schedule jobs for MLB fantasy baseball alerts.
-
-    Uses a hybrid approach:
-    - Periodic check (every 2 hours) detects matchup period transitions
-      and sends recaps/new matchups automatically
-    - Daily cron jobs handle routine alerts (scoreboard, monitor, waivers)
-    - Evening check on last day of period sends close scores
+    Start the background scheduler for all configured guilds,
+    then block the main thread.
     """
-    data = get_env_vars()
-    game_timezone = 'America/New_York'
-    sched = BlockingScheduler(job_defaults={'misfire_grace_time': 15 * 60})
-    season_start_date = data['season_start_date']
-    season_end_date = data['season_end_date']
-    my_timezone = data['my_timezone']
+    global _sched
+    from gamedaybot.db import get_all_guild_configs
 
-    # === Matchup period transition detection ===
-    # Check every 2 hours for period changes (sends final/standings/matchups)
-    sched.add_job(check_matchup_period_change, 'interval', hours=2,
-                  id='period_check', replace_existing=True)
+    _sched = BackgroundScheduler(job_defaults={'misfire_grace_time': 15 * 60})
+    _sched.start()
 
-    # === Last day of period: close scores ===
-    # Check every evening - only sends if it's actually the last day
-    sched.add_job(check_period_ending, 'cron',
-                  id='close_scores', hour=22, minute=0,
-                  start_date=season_start_date, end_date=season_end_date,
-                  timezone=game_timezone, replace_existing=True)
+    configs = get_all_guild_configs()
+    if not configs:
+        logger.warning("No guilds configured yet. Use !setup in Discord to add a league.")
+    for guild_config in configs:
+        register_guild_jobs(guild_config)
 
-    # === Daily alerts ===
+    print(f"Scheduler started with {len(configs)} guild(s). Ready!")
 
-    # Morning score update
-    sched.add_job(espn_bot, 'cron', ['get_scoreboard_short'], id='scoreboard_morning',
-                  hour=8, minute=0,
-                  start_date=season_start_date, end_date=season_end_date,
-                  timezone=my_timezone, replace_existing=True)
-
-    # Evening score update (after most games finish)
-    sched.add_job(espn_bot, 'cron', ['get_scoreboard_short'], id='scoreboard_evening',
-                  hour=23, minute=0,
-                  start_date=season_start_date, end_date=season_end_date,
-                  timezone=game_timezone, replace_existing=True)
-
-    # Waiver report
-    sched.add_job(espn_bot, 'cron', ['get_waiver_report'], id='waiver_report',
-                  hour=7, minute=32,
-                  start_date=season_start_date, end_date=season_end_date,
-                  timezone=my_timezone, replace_existing=True)
-
-    # Player monitor - before games start
-    if data['monitor_report']:
-        sched.add_job(espn_bot, 'cron', ['get_monitor'], id='monitor',
-                      hour=11, minute=0,
-                      start_date=season_start_date, end_date=season_end_date,
-                      timezone=game_timezone, replace_existing=True)
-
-    # Log period info on startup
     try:
-        league, espn_s2, swid = _get_league(data)
-        info = get_current_period_info(league, espn_s2, swid)
-        if info:
-            print(f"Current matchup period: {info['period']} of {info['total_periods']}")
-            print(f"Period dates: {info['start']} to {info['end']}")
-            print(f"Days remaining: {info['days_remaining']}")
-        else:
-            print("Could not determine matchup period info (season may not have started)")
-    except Exception as e:
-        print(f"Could not fetch period info: {e}")
-
-    print("Ready!")
-    sched.start()
+        while True:
+            time.sleep(60)
+    except (KeyboardInterrupt, SystemExit):
+        _sched.shutdown()
