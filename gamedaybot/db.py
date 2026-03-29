@@ -36,7 +36,8 @@ def init_db():
                 scoreboard_morning  INTEGER DEFAULT 1,
                 scoreboard_evening  INTEGER DEFAULT 1,
                 close_scores        INTEGER DEFAULT 1,
-                period_recap        INTEGER DEFAULT 1
+                period_recap        INTEGER DEFAULT 1,
+                waiver_report       INTEGER DEFAULT 1
             )
         ''')
         # Migrate existing tables that predate these columns
@@ -46,6 +47,7 @@ def init_db():
             ('scoreboard_evening', 1),
             ('close_scores', 1),
             ('period_recap', 1),
+            ('waiver_report', 1),
         ]:
             if col not in existing:
                 conn.execute(f'ALTER TABLE guilds ADD COLUMN {col} INTEGER DEFAULT {default}')

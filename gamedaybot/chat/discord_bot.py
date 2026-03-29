@@ -205,7 +205,7 @@ def create_bot():
     @app_commands.describe(
         scoreboard_morning='Morning score update at 8am (your timezone)',
         scoreboard_evening='Evening score update at 11pm ET',
-        waivers='Waiver report — daily or Mondays only',
+        waivers='Waiver report frequency',
         injuries='Daily injured/IL starters alert at 11am ET',
         close_scores='Close scores alert on last day of each week',
         period_recap='End-of-week recap: results, standings, matchups',
@@ -214,6 +214,7 @@ def create_bot():
     @app_commands.choices(waivers=[
         app_commands.Choice(name='Daily (Mon–Sun)', value='daily'),
         app_commands.Choice(name='Mondays only', value='monday'),
+        app_commands.Choice(name='Off', value='off'),
     ])
     async def config(
         interaction: discord.Interaction,
@@ -248,6 +249,7 @@ def create_bot():
         if scoreboard_evening is not None:
             updates['scoreboard_evening'] = int(scoreboard_evening)
         if waivers is not None:
+            updates['waiver_report'] = 0 if waivers == 'off' else 1
             updates['daily_waiver'] = 1 if waivers == 'daily' else 0
         if injuries is not None:
             updates['monitor_report'] = int(injuries)
@@ -278,7 +280,7 @@ def create_bot():
             f"",
             f"  Scoreboard (8am): {_on('scoreboard_morning')}",
             f"  Scoreboard (11pm):{_on('scoreboard_evening')}",
-            f"  Waivers:          {'daily' if full_config.get('daily_waiver') else 'Mondays'}",
+            f"  Waivers:          {'off' if not full_config.get('waiver_report', 1) else ('daily' if full_config.get('daily_waiver') else 'Mondays')}",
             f"  Injuries:         {_on('monitor_report')}",
             f"  Close scores:     {_on('close_scores')}",
             f"  Period recap:     {_on('period_recap')}",

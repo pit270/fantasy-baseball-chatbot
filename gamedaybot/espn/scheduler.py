@@ -126,11 +126,15 @@ def register_guild_jobs(guild_config):
 
     # Waiver report: Mondays only by default, every day if daily_waiver is enabled
     waiver_dow = 'mon-sun' if guild_config.get('daily_waiver', False) else 'mon'
-    _sched.add_job(espn_bot, 'cron', args=['get_waiver_report', guild_config],
-                   id=f'{prefix}_waiver_report', hour=7, minute=32,
-                   day_of_week=waiver_dow,
-                   start_date=season_start, end_date=season_end,
-                   timezone=my_timezone, replace_existing=True)
+    _add_or_remove_job(
+        f'{prefix}_waiver_report',
+        guild_config.get('waiver_report', True),
+        lambda: _sched.add_job(espn_bot, 'cron', args=['get_waiver_report', guild_config],
+                               id=f'{prefix}_waiver_report', hour=7, minute=32,
+                               day_of_week=waiver_dow,
+                               start_date=season_start, end_date=season_end,
+                               timezone=my_timezone, replace_existing=True),
+    )
 
     _add_or_remove_job(
         f'{prefix}_monitor',
