@@ -71,6 +71,17 @@ def check_period_ending(guild_config):
         logger.error(f"[{guild_id}] Error checking period ending: {e}")
 
 
+def _add_or_remove_job(job_id, enabled, add_fn):
+    """Add a job if enabled, remove it if disabled."""
+    if enabled:
+        add_fn()
+    else:
+        try:
+            _sched.remove_job(job_id)
+        except Exception:
+            pass
+
+
 def register_guild_jobs(guild_config):
     """Register all scheduled jobs for a single guild."""
     global _sched
@@ -95,17 +106,23 @@ def register_guild_jobs(guild_config):
                    start_date=season_start, end_date=season_end,
                    timezone=game_timezone, replace_existing=True)
 
-    if guild_config.get('scoreboard_morning', True):
-        _sched.add_job(espn_bot, 'cron', args=['get_scoreboard_short', guild_config],
-                       id=f'{prefix}_scoreboard_morning', hour=8, minute=0,
-                       start_date=season_start, end_date=season_end,
-                       timezone=my_timezone, replace_existing=True)
+    _add_or_remove_job(
+        f'{prefix}_scoreboard_morning',
+        guild_config.get('scoreboard_morning', True),
+        lambda: _sched.add_job(espn_bot, 'cron', args=['get_scoreboard_short', guild_config],
+                               id=f'{prefix}_scoreboard_morning', hour=8, minute=0,
+                               start_date=season_start, end_date=season_end,
+                               timezone=my_timezone, replace_existing=True),
+    )
 
-    if guild_config.get('scoreboard_evening', True):
-        _sched.add_job(espn_bot, 'cron', args=['get_scoreboard_short', guild_config],
-                       id=f'{prefix}_scoreboard_evening', hour=23, minute=0,
-                       start_date=season_start, end_date=season_end,
-                       timezone=game_timezone, replace_existing=True)
+    _add_or_remove_job(
+        f'{prefix}_scoreboard_evening',
+        guild_config.get('scoreboard_evening', True),
+        lambda: _sched.add_job(espn_bot, 'cron', args=['get_scoreboard_short', guild_config],
+                               id=f'{prefix}_scoreboard_evening', hour=23, minute=0,
+                               start_date=season_start, end_date=season_end,
+                               timezone=game_timezone, replace_existing=True),
+    )
 
     # Waiver report: Mondays only by default, every day if daily_waiver is enabled
     waiver_dow = 'mon-sun' if guild_config.get('daily_waiver', False) else 'mon'
@@ -115,11 +132,14 @@ def register_guild_jobs(guild_config):
                    start_date=season_start, end_date=season_end,
                    timezone=my_timezone, replace_existing=True)
 
-    if guild_config.get('monitor_report', True):
-        _sched.add_job(espn_bot, 'cron', args=['get_monitor', guild_config],
-                       id=f'{prefix}_monitor', hour=11, minute=0,
-                       start_date=season_start, end_date=season_end,
-                       timezone=game_timezone, replace_existing=True)
+    _add_or_remove_job(
+        f'{prefix}_monitor',
+        guild_config.get('monitor_report', True),
+        lambda: _sched.add_job(espn_bot, 'cron', args=['get_monitor', guild_config],
+                               id=f'{prefix}_monitor', hour=11, minute=0,
+                               start_date=season_start, end_date=season_end,
+                               timezone=game_timezone, replace_existing=True),
+    )
 
     logger.info(f"[{guild_id}] Scheduled jobs registered")
 
