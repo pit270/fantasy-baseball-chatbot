@@ -231,15 +231,20 @@ def scan_roster(lineup, team):
     return report
 
 
-def get_waiver_report(league, faab=False):
+def get_waiver_report(league, faab=False, days=1):
     """
-    Generate a waiver report listing transactions from the last 24 hours,
-    grouped by team.
+    Generate a waiver report listing transactions grouped by team.
+    days=1 uses a rolling 24-hour window; days>=2 aligns to midnight.
     """
-    from datetime import datetime, timezone as tz
+    from datetime import datetime, timezone as tz, timedelta
     from collections import defaultdict
     activities = league.recent_activity(50)
-    cutoff = datetime.now(tz.utc).timestamp() - 86400
+    now = datetime.now(tz.utc)
+    if days == 1:
+        cutoff = now.timestamp() - 86400
+    else:
+        cutoff = (now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days - 1)).timestamp()
+    label = 'Last 24 hours' if days == 1 else f'Last {days} days'
     today = date.today().strftime('%Y-%m-%d')
     text = ''
 
@@ -261,7 +266,7 @@ def get_waiver_report(league, faab=False):
                 by_team[team_name]['dropped'].append(player)
 
     if not by_team:
-        return 'Waiver Report %s: \nNo waiver transactions' % today
+        return 'Waiver Report (%s): \nNo waiver transactions' % label
 
     report = []
     for team_name, moves in by_team.items():
@@ -272,7 +277,7 @@ def get_waiver_report(league, faab=False):
             lines.append(f'  DROPPED {p}')
         report.append('\n'.join(lines))
 
-    return 'Waiver Report %s: \n' % today + '\n\n'.join(report)
+    return 'Waiver Report (%s): \n' % label + '\n\n'.join(report)
 
 
 def get_weekly_score_with_win_loss(league, week=None):

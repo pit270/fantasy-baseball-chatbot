@@ -41,7 +41,7 @@ def _make_league(guild_config):
         return League(league_id=league_id, year=year, espn_s2=espn_s2, swid=swid), espn_s2, swid
 
 
-def generate_report(function, guild_config):
+def generate_report(function, guild_config, days=1):
     """
     Generate report text for a given function name and guild config.
 
@@ -90,7 +90,7 @@ def generate_report(function, guild_config):
         text = text + "\n\n" + espn.get_trophies(league, week=week)
     elif function == "get_waiver_report" and swid != '{1}' and espn_s2 != '1':
         faab = league.settings.faab
-        text = espn.get_waiver_report(league, faab)
+        text = espn.get_waiver_report(league, faab, days=days)
     elif function == "get_monitor":
         text = espn.get_monitor(league)
     else:

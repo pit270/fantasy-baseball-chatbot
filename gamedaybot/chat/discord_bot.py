@@ -17,7 +17,6 @@ COMMAND_MAP = {
     'standings': ('get_standings', 'League standings'),
     'trophies': ('get_trophies', 'Awards for the current week'),
     'close': ('get_close_scores', 'Matchups that are too close to call'),
-    'transactions': ('get_waiver_report', "Today's adds and drops"),
     'injuries': ('get_monitor', 'Injured or IL-ineligible players in starting lineups'),
     'results': ('get_final', 'Final scores and awards from last week'),
     'allplay': ('win_matrix', 'Standings if every team played each other every week'),
@@ -158,6 +157,40 @@ def create_bot():
 
     for cmd_name, (function_name, description) in COMMAND_MAP.items():
         bot.tree.command(name=cmd_name, description=description)(make_command(function_name))
+
+    @bot.tree.command(name='transactions', description="Recent adds and drops")
+    @app_commands.describe(days='How many days to look back (default 1 = last 24 hours; 2+ aligns to midnight)')
+    async def transactions(interaction: discord.Interaction, days: Optional[int] = 1):
+        from gamedaybot.espn.espn_bot import generate_report
+        from gamedaybot.db import get_guild_config
+        import gamedaybot.utils.util as util
+
+        if days < 1:
+            await interaction.response.send_message("```days must be 1 or more.```", ephemeral=True)
+            return
+
+        guild_config = get_guild_config(interaction.guild_id)
+        if not guild_config or not guild_config.get('league_id'):
+            await interaction.response.send_message(
+                "```This server hasn't been set up yet. Run /setup to configure your league.```",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer()
+        try:
+            text = await asyncio.to_thread(generate_report, 'get_waiver_report', guild_config, days)
+        except Exception as e:
+            logger.error(f"Error generating waiver report: {e}")
+            await interaction.followup.send(f"```Error generating report: {e}```")
+            return
+
+        if not text:
+            await interaction.followup.send("```No data available```")
+            return
+
+        for message in util.str_limit_check(text, 1900):
+            await interaction.followup.send(f"```{message}```")
 
     @bot.tree.command(name='setup', description='Configure the bot for your league (admin only)')
     async def setup(interaction: discord.Interaction):
