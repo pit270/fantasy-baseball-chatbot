@@ -233,51 +233,46 @@ def scan_roster(lineup, team):
 
 def get_waiver_report(league, faab=False):
     """
-    Generate a waiver report listing transactions from the last 24 hours.
+    Generate a waiver report listing transactions from the last 24 hours,
+    grouped by team.
     """
     from datetime import datetime, timezone as tz
+    from collections import defaultdict
     activities = league.recent_activity(50)
-    report = []
     cutoff = datetime.now(tz.utc).timestamp() - 86400
     today = date.today().strftime('%Y-%m-%d')
     text = ''
 
+    # team_name -> {'added': [...], 'dropped': [...]}
+    by_team = defaultdict(lambda: {'added': [], 'dropped': []})
+    added_types = ('WAIVER ADDED', 'FA ADDED')
+    drop_types = ('DROPPED',)
+
     for activity in activities:
-        actions = activity.actions
         if (activity.date / 1000) < cutoff:
             continue
-        added_types = ('WAIVER ADDED', 'FA ADDED')
-        if len(actions) == 1 and actions[0][1] in added_types:
-            if not isinstance(actions[0][2], str) or not actions[0][2]:
+        for team, action, player in activity.actions:
+            if not isinstance(player, str) or not player:
                 continue
-            team_name = actions[0][0].team_name
-            player_name = actions[0][2]
-            s = f'{team_name} \nADDED {player_name}\n'
-            report += [s.lstrip()]
-        elif len(actions) > 1:
-            if actions[0][1] in added_types or actions[1][1] in added_types:
-                if not isinstance(actions[0][2], str) or not isinstance(actions[1][2], str):
-                    continue
-                if not actions[0][2] or not actions[1][2]:
-                    continue
-                if actions[0][1] in added_types:
-                    added_player = actions[0][2]
-                    dropped_player = actions[1][2]
-                else:
-                    added_player = actions[1][2]
-                    dropped_player = actions[0][2]
-                s = '%s \nADDED %s\nDROPPED %s\n' % (
-                    actions[0][0].team_name, added_player, dropped_player)
-                report += [s.lstrip()]
+            team_name = team.team_name
+            if action in added_types:
+                by_team[team_name]['added'].append(player)
+            elif action in drop_types:
+                by_team[team_name]['dropped'].append(player)
 
-    report.reverse()
+    if not by_team:
+        return 'Waiver Report %s: \nNo waiver transactions' % today
 
-    if not report:
-        report += ['No waiver transactions']
-    else:
-        text = ['Waiver Report %s: ' % today] + report
+    report = []
+    for team_name, moves in by_team.items():
+        lines = [team_name]
+        for p in moves['added']:
+            lines.append(f'  ADDED   {p}')
+        for p in moves['dropped']:
+            lines.append(f'  DROPPED {p}')
+        report.append('\n'.join(lines))
 
-    return '\n'.join(text)
+    return 'Waiver Report %s: \n' % today + '\n\n'.join(report)
 
 
 def get_weekly_score_with_win_loss(league, week=None):
