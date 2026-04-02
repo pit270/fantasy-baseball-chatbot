@@ -21,6 +21,10 @@ COMMAND_MAP = {
     'results': ('get_final', 'Final scores and awards from last week'),
     'allplay': ('win_matrix', 'Standings if every team played each other every week'),
     'seasonrecap': ('trophy_recap', 'Trophy counts for the entire season'),
+    'streaks': ('get_streaks', 'Current win/loss streaks for all teams'),
+    'streakmilestones': ('get_streak_milestones', 'Notable streak milestones (5+ games)'),
+    'playoffrace': ('get_playoff_race', 'Playoff race: magic numbers, clinch/elimination status'),
+    'playoffalerts': ('get_playoff_alerts', 'Clinch and elimination alerts'),
 }
 
 
@@ -192,6 +196,40 @@ def create_bot():
         for message in util.str_limit_check(text, 1900):
             await interaction.followup.send(f"```{message}```")
 
+    @bot.tree.command(name='rivalry', description='Head-to-head record between two teams')
+    @app_commands.describe(
+        team1='First team name or abbreviation',
+        team2='Second team name or abbreviation'
+    )
+    async def rivalry(interaction: discord.Interaction, team1: str, team2: str):
+        from gamedaybot.espn.espn_bot import generate_report
+        from gamedaybot.db import get_guild_config
+        import gamedaybot.utils.util as util
+
+        guild_config = get_guild_config(interaction.guild_id)
+        if not guild_config or not guild_config.get('league_id'):
+            await interaction.response.send_message(
+                "```This server hasn't been set up yet. Run /setup to configure your league.```",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer()
+        try:
+            text = await asyncio.to_thread(generate_report, 'get_rivalry', guild_config,
+                                           team1=team1, team2=team2)
+        except Exception as e:
+            logger.error(f"Error generating rivalry report: {e}")
+            await interaction.followup.send(f"```Error generating report: {e}```")
+            return
+
+        if not text:
+            await interaction.followup.send("```No data available```")
+            return
+
+        for message in util.str_limit_check(text, 1900):
+            await interaction.followup.send(f"```{message}```")
+
     @bot.tree.command(name='setup', description='Configure the bot for your league (admin only)')
     async def setup(interaction: discord.Interaction):
         if not _is_admin(interaction.user):
@@ -229,6 +267,8 @@ def create_bot():
             f"  Injuries:         {_on('monitor_report')}",
             f"  Close scores:     {_on('close_scores')}",
             f"  Period recap:     {_on('period_recap')}",
+            f"  Streak alerts:    {_on('streak_milestones')}",
+            f"  Playoff alerts:   {_on('playoff_alerts')}",
         ]
         await interaction.response.send_message(
             "```" + "\n".join(lines) + "```", ephemeral=True
@@ -242,6 +282,8 @@ def create_bot():
         injuries='Daily injured/IL starters alert at 11am ET',
         close_scores='Close scores alert on last day of each week',
         period_recap='End-of-week recap: results, standings, matchups',
+        streak_milestones='Streak milestone alerts (5+ game streaks) on period change',
+        playoff_alerts='Clinch/elimination alerts on period change',
         timezone='Your timezone, e.g. America/Chicago or America/Los_Angeles',
     )
     @app_commands.choices(waivers=[
@@ -257,6 +299,8 @@ def create_bot():
         injuries: Optional[bool] = None,
         close_scores: Optional[bool] = None,
         period_recap: Optional[bool] = None,
+        streak_milestones: Optional[bool] = None,
+        playoff_alerts: Optional[bool] = None,
         timezone: Optional[str] = None,
     ):
         from gamedaybot.db import get_guild_config, save_guild_config
@@ -290,6 +334,10 @@ def create_bot():
             updates['close_scores'] = int(close_scores)
         if period_recap is not None:
             updates['period_recap'] = int(period_recap)
+        if streak_milestones is not None:
+            updates['streak_milestones'] = int(streak_milestones)
+        if playoff_alerts is not None:
+            updates['playoff_alerts'] = int(playoff_alerts)
         if timezone is not None:
             updates['timezone'] = timezone.strip()
 
@@ -317,6 +365,8 @@ def create_bot():
             f"  Injuries:         {_on('monitor_report')}",
             f"  Close scores:     {_on('close_scores')}",
             f"  Period recap:     {_on('period_recap')}",
+            f"  Streak alerts:    {_on('streak_milestones')}",
+            f"  Playoff alerts:   {_on('playoff_alerts')}",
             f"  Timezone:         {full_config.get('timezone', 'America/New_York')}",
         ]
         await interaction.response.send_message(

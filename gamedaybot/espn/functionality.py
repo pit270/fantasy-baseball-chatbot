@@ -1,6 +1,25 @@
 from datetime import date
 
 
+def find_team(league, identifier):
+    """Find a team by abbreviation (exact) or name (substring), case-insensitive.
+    Returns the team object if exactly one match, None otherwise."""
+    identifier = identifier.strip()
+    if not identifier:
+        return None
+
+    # Try exact abbreviation match first
+    for team in league.teams:
+        if team.team_abbrev.lower() == identifier.lower():
+            return team
+
+    # Fall back to substring name match
+    matches = [t for t in league.teams if identifier.lower() in t.team_name.lower()]
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
 def get_scoreboard_short(league, week=None):
     """
     Retrieve the scoreboard for a given matchup period of the fantasy baseball season.
@@ -451,5 +470,250 @@ def get_trophies(league, week=None, recap=False):
     lucky_result = get_lucky_trophy(league, week)
     if isinstance(lucky_result, list):
         lines += lucky_result
+
+    return '\n'.join(lines)
+
+
+def _compute_streaks(league):
+    """Compute current win/loss/tie streaks for all teams.
+    Returns dict: {team: {'type': 'W'/'L'/'T', 'count': int}}"""
+    streaks = {t: {'type': None, 'count': 0} for t in league.teams}
+
+    for week in range(1, league.currentMatchupPeriod):
+        weekly = get_weekly_score_with_win_loss(league, week=week)
+        for team, (score, result) in weekly.items():
+            if streaks[team]['type'] == result:
+                streaks[team]['count'] += 1
+            else:
+                streaks[team]['type'] = result
+                streaks[team]['count'] = 1
+
+    return streaks
+
+
+def get_streaks(league):
+    """Display current win/loss/tie streaks for all teams, sorted by length."""
+    if league.currentMatchupPeriod <= 1:
+        return 'No completed matchup periods yet.'
+
+    streaks = _compute_streaks(league)
+    sorted_teams = sorted(streaks.keys(),
+                          key=lambda t: streaks[t]['count'], reverse=True)
+
+    lines = ['Current Streaks']
+    for team in sorted_teams:
+        s = streaks[team]
+        if s['type'] is None:
+            continue
+        streak_str = '%s%d' % (s['type'], s['count'])
+        lines.append('%-20s %s' % (team.team_name[:20], streak_str))
+
+    return '\n'.join(lines)
+
+
+def get_streak_milestones(league):
+    """Return notable streak milestones (5+ games). Empty string if none."""
+    if league.currentMatchupPeriod <= 1:
+        return ''
+
+    streaks = _compute_streaks(league)
+    notable = [(t, s) for t, s in streaks.items() if s['count'] >= 5]
+
+    if not notable:
+        return ''
+
+    notable.sort(key=lambda x: x[1]['count'], reverse=True)
+    lines = ['Streak Alert!']
+    for team, s in notable:
+        label = 'win' if s['type'] == 'W' else 'losing' if s['type'] == 'L' else 'tie'
+        lines.append('%s is on a %d-game %s streak!' % (team.team_name, s['count'], label))
+
+    return '\n'.join(lines)
+
+
+def get_rivalry(league, team1_name, team2_name):
+    """Head-to-head record between two teams across all matchup periods this season."""
+    team1 = find_team(league, team1_name)
+    team2 = find_team(league, team2_name)
+
+    available = ', '.join(t.team_abbrev for t in league.teams)
+
+    if not team1:
+        return "Could not find team matching '%s'. Available: %s" % (team1_name, available)
+    if not team2:
+        return "Could not find team matching '%s'. Available: %s" % (team2_name, available)
+    if team1 == team2:
+        return "Please provide two different teams."
+
+    t1_wins = 0
+    t2_wins = 0
+    ties = 0
+    matchup_results = []
+
+    for week in range(1, league.currentMatchupPeriod):
+        box_scores = league.box_scores(matchup_period=week)
+        for bs in box_scores:
+            home = bs.home_team
+            away = bs.away_team
+            if not away or home == 0 or away == 0:
+                continue
+
+            if not ((home.team_id == team1.team_id and away.team_id == team2.team_id) or
+                    (home.team_id == team2.team_id and away.team_id == team1.team_id)):
+                continue
+
+            is_categories = hasattr(bs, 'home_wins')
+            if is_categories:
+                t1_is_home = home.team_id == team1.team_id
+                home_val = bs.home_wins
+                away_val = bs.away_wins
+            else:
+                t1_is_home = home.team_id == team1.team_id
+                home_val = bs.home_score
+                away_val = bs.away_score
+
+            t1_val = home_val if t1_is_home else away_val
+            t2_val = away_val if t1_is_home else home_val
+
+            if t1_val > t2_val:
+                t1_wins += 1
+                result = 'W'
+            elif t1_val < t2_val:
+                t2_wins += 1
+                result = 'L'
+            else:
+                ties += 1
+                result = 'T'
+
+            if is_categories:
+                detail = '%d-%d' % (int(t1_val), int(t2_val))
+            else:
+                detail = '%.2f - %.2f' % (t1_val, t2_val)
+            matchup_results.append((week, detail, result))
+
+    if not matchup_results:
+        return '%s and %s have not faced each other yet this season.' % (
+            team1.team_name, team2.team_name)
+
+    lines = ['Rivalry: %s vs %s (%d)' % (team1.team_name, team2.team_name, league.year)]
+    lines.append('%s leads %d-%d-%d' % (
+        team1.team_name if t1_wins > t2_wins else
+        team2.team_name if t2_wins > t1_wins else 'Tied',
+        max(t1_wins, t2_wins), min(t1_wins, t2_wins), ties)
+        if t1_wins != t2_wins else 'Tied %d-%d-%d' % (t1_wins, t2_wins, ties))
+    lines.append('')
+    for week, detail, result in matchup_results:
+        lines.append('Week %2d: %s  (%s)' % (week, detail, result))
+
+    return '\n'.join(lines)
+
+
+def get_playoff_race(league):
+    """Playoff race with magic numbers, clinch/elimination status, and upcoming matchups."""
+    playoff_spots = league.settings.playoff_team_count
+    reg_season = league.settings.reg_season_count
+    completed_weeks = league.currentMatchupPeriod - 1
+
+    if playoff_spots == 0:
+        return 'This league does not have playoffs configured.'
+
+    if completed_weeks >= reg_season:
+        return 'The regular season is over. Playoffs have begun!'
+
+    remaining_weeks = reg_season - completed_weeks
+
+    # Sort teams by ESPN's playoff seed (standing)
+    teams = sorted(league.teams, key=lambda t: t.standing)
+
+    # Bubble team is the first team outside the playoff spots
+    bubble_team = teams[playoff_spots] if len(teams) > playoff_spots else None
+    # Cutline team is the last team in a playoff spot
+    cutline_team = teams[playoff_spots - 1]
+
+    lines = ['Playoff Race (%d spots, %d weeks remaining)' % (playoff_spots, remaining_weeks)]
+    lines.append('')
+    lines.append(' # %-20s Record  Status         Magic#' % 'Team')
+
+    for pos, team in enumerate(teams, 1):
+        record = '%d-%d-%d' % (team.wins, team.losses, team.ties)
+
+        if pos <= playoff_spots:
+            if bubble_team and team.wins - bubble_team.wins > remaining_weeks:
+                status = 'CLINCHED'
+                magic = '--'
+            else:
+                status = 'In the race'
+                if bubble_team:
+                    magic = str(remaining_weeks + 1 - (team.wins - bubble_team.wins))
+                else:
+                    magic = '--'
+        else:
+            max_wins = team.wins + remaining_weeks
+            if max_wins < cutline_team.wins:
+                status = 'ELIMINATED'
+                magic = '--'
+            else:
+                status = 'In the race'
+                magic = '--'
+
+        lines.append('%2d %-20s %-7s %-14s %s' % (
+            pos, team.team_name[:20], record, status, magic))
+
+        if pos == playoff_spots:
+            lines.append('   ---- playoff cutline ----')
+
+    # Show next opponents
+    lines.append('')
+    lines.append('Upcoming matchups:')
+    for team in teams:
+        upcoming = []
+        for week in range(league.currentMatchupPeriod,
+                          min(league.currentMatchupPeriod + 3, reg_season + 1)):
+            box_scores = league.box_scores(matchup_period=week)
+            for bs in box_scores:
+                if bs.home_team and bs.away_team:
+                    if hasattr(bs.home_team, 'team_id') and bs.home_team.team_id == team.team_id:
+                        upcoming.append(bs.away_team.team_abbrev)
+                    elif hasattr(bs.away_team, 'team_id') and bs.away_team.team_id == team.team_id:
+                        upcoming.append(bs.home_team.team_abbrev)
+        lines.append('%-20s %s' % (team.team_name[:20], ', '.join(upcoming) if upcoming else 'None'))
+
+    return '\n'.join(lines)
+
+
+def get_playoff_alerts(league):
+    """Return clinch/elimination alerts. Empty string if no team has clinched or been eliminated."""
+    playoff_spots = league.settings.playoff_team_count
+    reg_season = league.settings.reg_season_count
+    completed_weeks = league.currentMatchupPeriod - 1
+
+    if playoff_spots == 0 or completed_weeks >= reg_season:
+        return ''
+
+    remaining_weeks = reg_season - completed_weeks
+    teams = sorted(league.teams, key=lambda t: t.standing)
+    bubble_team = teams[playoff_spots] if len(teams) > playoff_spots else None
+    cutline_team = teams[playoff_spots - 1]
+
+    clinched = []
+    eliminated = []
+
+    for pos, team in enumerate(teams, 1):
+        if pos <= playoff_spots:
+            if bubble_team and team.wins - bubble_team.wins > remaining_weeks:
+                clinched.append(team.team_name)
+        else:
+            max_wins = team.wins + remaining_weeks
+            if max_wins < cutline_team.wins:
+                eliminated.append(team.team_name)
+
+    if not clinched and not eliminated:
+        return ''
+
+    lines = ['Playoff Alert!']
+    for name in clinched:
+        lines.append('%s has CLINCHED a playoff spot!' % name)
+    for name in eliminated:
+        lines.append('%s has been ELIMINATED from playoff contention.' % name)
 
     return '\n'.join(lines)

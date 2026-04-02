@@ -41,7 +41,7 @@ def _make_league(guild_config):
         return League(league_id=league_id, year=year, espn_s2=espn_s2, swid=swid), espn_s2, swid
 
 
-def generate_report(function, guild_config, days=1):
+def generate_report(function, guild_config, days=1, **kwargs):
     """
     Generate report text for a given function name and guild config.
 
@@ -93,6 +93,16 @@ def generate_report(function, guild_config, days=1):
         text = espn.get_waiver_report(league, faab, days=days)
     elif function == "get_monitor":
         text = espn.get_monitor(league)
+    elif function == "get_streaks":
+        text = espn.get_streaks(league)
+    elif function == "get_streak_milestones":
+        text = espn.get_streak_milestones(league)
+    elif function == "get_rivalry":
+        text = espn.get_rivalry(league, kwargs.get('team1', ''), kwargs.get('team2', ''))
+    elif function == "get_playoff_race":
+        text = espn.get_playoff_race(league)
+    elif function == "get_playoff_alerts":
+        text = espn.get_playoff_alerts(league)
     else:
         return None
 

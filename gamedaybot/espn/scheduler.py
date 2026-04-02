@@ -51,6 +51,10 @@ def check_matchup_period_change(guild_config):
                 espn_bot("get_final", guild_config)
                 espn_bot("get_standings", guild_config)
                 espn_bot("get_matchups", guild_config)
+            if guild_config.get('streak_milestones', True):
+                espn_bot("get_streak_milestones", guild_config)
+            if guild_config.get('playoff_alerts', True):
+                espn_bot("get_playoff_alerts", guild_config)
 
     except Exception as e:
         logger.error(f"[{guild_id}] Error checking matchup period: {e}")
